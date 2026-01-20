@@ -472,7 +472,7 @@ app.put("/api/scratch-cards/:id/scratch", authenticate, async (req, res) => {
 });
 
 mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/food', { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('✅ MongoDB connected successfully'))
-  .catch(err => console.error('❌ MongoDB connection error:', err.message));
+  .then(() => console.log('✅ MongoDB connected successfully!'))
+  .catch(err => console.error('❌ MongoDB connection failed:', err.message));
 
 server.listen(process.env.PORT || 5000, () => console.log("Server running"));
