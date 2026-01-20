@@ -31,7 +31,7 @@ const Checkout = () => {
         total: discountedTotal,
         paymentMethod
       };
-      const response = await fetch('http://localhost:5000/api/orders', {
+      const response = await fetch(`${API_BASE_URL}/api/orders`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,7 +55,7 @@ const Checkout = () => {
       const order = await response.json();
 
       // Process payment
-      const paymentResponse = await fetch(`http://localhost:5000/api/payments/${order._id}/process`, {
+      const paymentResponse = await fetch(`${API_BASE_URL}/api/payments/${order._id}/process`, {
         method: 'POST'
       });
       if (!paymentResponse.ok) throw new Error('Payment failed');

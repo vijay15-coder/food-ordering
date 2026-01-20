@@ -11,7 +11,7 @@ const OrderTracking = () => {
 
   // Connect to Socket.IO
   useEffect(() => {
-    const newSocket = io('http://localhost:5000');
+    const newSocket = io(API_BASE_URL);
     setSocket(newSocket);
 
     return () => newSocket.disconnect();
@@ -57,7 +57,7 @@ const OrderTracking = () => {
     setOrder(null);
 
     try {
-      const response = await fetch(`http://localhost:5000/api/orders/track/${orderNumber}`);
+      const response = await fetch(`${API_BASE_URL}/api/orders/track/${orderNumber}`);
       const data = await response.json();
 
       if (!response.ok) {

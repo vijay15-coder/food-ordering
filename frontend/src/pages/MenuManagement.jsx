@@ -18,7 +18,7 @@ const MenuManagement = () => {
 
   const fetchMenu = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/menu');
+      const response = await fetch(`${API_BASE_URL}/api/menu`);
       if (!response.ok) throw new Error('Failed to fetch menu');
       const data = await response.json();
       setMenuItems(data);
@@ -35,7 +35,7 @@ const MenuManagement = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const url = editingItem ? `http://localhost:5000/api/menu/${editingItem._id}` : 'http://localhost:5000/api/menu';
+    const url = editingItem ? `${API_BASE_URL}/api/menu/${editingItem._id}` : `${API_BASE_URL}/api/menu`;
     const method = editingItem ? 'PUT' : 'POST';
 
     try {
@@ -76,7 +76,7 @@ const MenuManagement = () => {
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this item?')) return;
     try {
-      const response = await fetch(`http://localhost:5000/api/menu/${id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/menu/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

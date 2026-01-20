@@ -14,7 +14,7 @@ const OrderManagement = () => {
     try {
       const token = localStorage.getItem('token');
       console.log('Token:', token ? 'present' : 'missing');
-      const response = await fetch('http://localhost:5000/api/orders', {
+      const response = await fetch(`${API_BASE_URL}/api/orders`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -35,7 +35,7 @@ const OrderManagement = () => {
   useEffect(() => {
     fetchOrders();
 
-    const socket = io('http://localhost:5000');
+    const socket = io(API_BASE_URL);
     socket.on('newOrder', (newOrder) => {
       fetchOrders();
       setSelectedOrder(newOrder); // Automatically show bill for new order
@@ -51,7 +51,7 @@ const OrderManagement = () => {
 
   const handleStatusChange = async (orderId, newStatus) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+      const response = await fetch(`${API_BASE_URL}/api/orders/${orderId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

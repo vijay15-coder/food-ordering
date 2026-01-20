@@ -103,7 +103,7 @@ const ScratchCards = () => {
   const scratchCard = async (id) => {
     const token = localStorage.getItem('token');
     try {
-      const response = await fetch(`http://localhost:5000/api/scratch-cards/${id}/scratch`, {
+      const response = await fetch(`${API_BASE_URL}/api/scratch-cards/${id}/scratch`, {
         method: 'PUT',
         headers: { 'Authorization': `Bearer ${token}` }
       });

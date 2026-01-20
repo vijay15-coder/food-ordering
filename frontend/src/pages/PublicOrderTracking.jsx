@@ -10,7 +10,7 @@ const PublicOrderTracking = () => {
 
   // Connect to Socket.IO
   useEffect(() => {
-    const newSocket = io('http://localhost:5000');
+    const newSocket = io(API_BASE_URL);
     setSocket(newSocket);
 
     // Join public order tracking room
@@ -51,7 +51,7 @@ const PublicOrderTracking = () => {
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:5000/api/orders/public');
+      const response = await fetch(`${API_BASE_URL}/api/orders/public`);
       const data = await response.json();
 
       if (!response.ok) {
