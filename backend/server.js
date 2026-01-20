@@ -6,6 +6,11 @@ console.log('MONGO_URI:', process.env.MONGO_URI ? 'SET' : 'NOT SET');
 console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
 console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
 
+// Show partial MONGO_URI for debugging (first 50 chars)
+if (process.env.MONGO_URI) {
+  console.log('MONGO_URI (first 50 chars):', process.env.MONGO_URI.substring(0, 50) + '...');
+}
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
