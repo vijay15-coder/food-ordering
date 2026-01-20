@@ -5,8 +5,9 @@ import Menu from "../components/Menu";
 import Cart from "../components/Cart";
 import { useCart } from "../contexts/CartContext";
 import { useAuth } from "../contexts/AuthContext";
+import API_BASE_URL from "../config/api";
 
-const socket = io("http://localhost:5000");
+const socket = io(API_BASE_URL);
 
 const Home = () => {
   const { getTotalItems } = useCart();
