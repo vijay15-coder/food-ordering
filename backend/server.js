@@ -129,350 +129,165 @@ app.post("/api/orders", authenticate, async (req, res) => {
     await order.save();
     const payment = new Payment({ orderId: order._id, amount: order.total, method: order.paymentMethod });
     await payment.save();
-    order.paymentId = payment._id;
-    await order.save();
-    // Try simple populate first
-    await order.populate('userId', 'name email');
-    await order.populate('items.menuId', 'name price');
-    io.emit('newOrder', order); // Emit to all connected clients
-    console.log('Order created and populated successfully');
-    res.status(201).json(order);
-  } catch (error) {
-    console.log('Order creation error:', error);
-    res.status(400).json({ message: error.message });
-  }
-});
-
-app.get("/api/orders", authenticate, authorize(['admin']), async (req, res) => {
-  try {
-    console.log('GET /api/orders - User ID:', req.user._id, 'Role:', req.user.role);
-    console.log('Fetching orders...');
-    const orders = await Order.find().populate('userId', 'name email').populate('items.menuId', 'name price');
-    console.log('Orders found:', orders.length);
-    // Sort orders: pending first, then by status priority, then by createdAt ascending
-    const statusOrder = { pending: 1, approved: 2, preparing: 3, ready: 4, completed: 5 };
-    orders.sort((a, b) => {
-      const aPriority = statusOrder[a.status] || 6;
-      const bPriority = statusOrder[b.status] || 6;
-      if (aPriority !== bPriority) return aPriority - bPriority;
-      return new Date(a.createdAt) - new Date(b.createdAt);
-    });
-    res.json(orders);
-  } catch (error) {
-    console.log('Error fetching orders:', error.message);
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Public order tracking endpoint (no authentication required)
-app.get("/api/orders/track/:orderNumber", async (req, res) => {
-  try {
-    const orderNumber = parseInt(req.params.orderNumber);
-    if (isNaN(orderNumber)) {
-      return res.status(400).json({ message: 'Invalid order number' });
-    }
-    
-    const order = await Order.findOne({ orderNumber })
-      .populate('items.menuId', 'name price')
-      .populate('userId', 'name email');
-    
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
-    
-    // Return only necessary information for tracking
-    const orderInfo = {
-      orderNumber: order.orderNumber,
-      status: order.status,
-      total: order.total,
-      createdAt: order.createdAt,
-      items: order.items.map(item => ({
-        name: item.menuId?.name || 'Unknown Item',
-        quantity: item.quantity,
-        price: item.menuId?.price || 0
-      })),
-      estimatedTime: getEstimatedTime(order.status)
-    };
-    
-    res.json(orderInfo);
-  } catch (error) {
-    console.log('Error tracking order:', error.message);
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Public endpoint to get all approved/completed orders (no authentication required)
-app.get("/api/orders/public", async (req, res) => {
-  try {
-    console.log('Fetching public orders...');
-    const orders = await Order.find({ 
-      status: { $in: ['approved', 'completed'] } 
-    })
-    .populate('userId', 'name email')
-    .populate('items.menuId', 'name price')
-    .sort({ createdAt: -1 });
-    
-    console.log('Public orders found:', orders.length);
-    
-    // Format orders for public display
-    const publicOrders = orders.map(order => ({
-      _id: order._id,
-      orderNumber: order.orderNumber,
-      status: order.status,
-      total: order.total,
-      createdAt: order.createdAt,
-      customerName: order.userId?.name || 'Anonymous',
-      items: order.items.map(item => ({
-        name: item.menuId?.name || 'Unknown Item',
-        quantity: item.quantity,
-        price: item.menuId?.price || 0
-      })),
-      estimatedTime: getEstimatedTime(order.status),
-      isCompleted: order.status === 'completed'
-    }));
-    
-    res.json(publicOrders);
-  } catch (error) {
-    console.log('Error fetching public orders:', error.message);
-    res.status(500).json({ message: error.message });
-  }
-});
-
-// Helper function to estimate preparation time based on status
-function getEstimatedTime(status) {
-  const times = {
-    'pending': '5-10 minutes',
-    'approved': '15-20 minutes',
-    'preparing': '10-15 minutes',
-    'ready': 'Ready for pickup',
-    'completed': 'Completed'
-  };
-  return times[status] || 'Calculating...';
-}
-
-app.get("/api/orders/user", authenticate, async (req, res) => {
-  try {
-    const orders = await Order.find({ userId: req.user._id }).populate('items.menuId', 'name price');
-    res.json(orders);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.put("/api/orders/:id/status", authenticate, authorize(['admin']), async (req, res) => {
-  try {
-    const { status } = req.body;
-    if (!status || !['pending', 'approved', 'preparing', 'ready', 'completed'].includes(status)) {
-      return res.status(400).json({ message: 'Invalid status' });
-    }
-    const order = await Order.findByIdAndUpdate(req.params.id, { status }, { new: true });
-    if (!order) {
-      return res.status(404).json({ message: 'Order not found' });
-    }
-    
-    // Populate order for socket emission
-    await order.populate('userId', 'name email');
-    await order.populate('items.menuId', 'name price');
-    
-    // Emit order status update for real-time tracking
-    io.to(`order-${order.orderNumber}`).emit('orderStatusUpdate', {
-      orderNumber: order.orderNumber,
-      status: order.status,
-      estimatedTime: getEstimatedTime(order.status)
-    });
-    
-    // Also emit to public orders room for public tracking interface
-    io.to('public-orders').emit('publicOrderUpdate', {
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      status: order.status,
-      customerName: order.userId?.name || 'Anonymous',
-      estimatedTime: getEstimatedTime(order.status),
-      isCompleted: order.status === 'completed'
-    });
-    
-    // Also emit to general newOrder event for admin dashboard
-    io.emit('orderStatusChanged', order);
-    
-    if (status === "completed") {
-      if (order.userId) {
-        io.to(order.userId.toString()).emit("orderCompleted", { message: "Your order is ready! 🍽️" });
-      }
-      // Delete the order after 10 seconds
-      setTimeout(async () => {
-        try {
-          await Order.findByIdAndDelete(order._id);
-          io.emit('orderDeleted', order._id);
-          io.to(`order-${order.orderNumber}`).emit('orderDeleted', order.orderNumber);
-          // Notify public tracking interface about deletion
-          io.to('public-orders').emit('publicOrderDeleted', order._id);
-        } catch (error) {
-          console.error('Error deleting order:', error);
-        }
-      }, 10000);
-    }
+    io.to('public-orders').emit('newOrder', { orderNumber: order.orderNumber, status: order.status });
     res.json(order);
   } catch (error) {
-    console.log('Error updating order status:', error.message);
+    console.error('Error creating order:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-// Menu routes
+app.get("/api/orders", authenticate, async (req, res) => {
+  try {
+    const orders = await Order.find({ userId: req.user._id });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.put("/api/orders/:id", authenticate, authorize(['admin']), async (req, res) => {
+  try {
+    const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    io.to(`order-${order.orderNumber}`).emit('orderUpdate', order);
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/orders/:id", authenticate, async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: 'Order not found' });
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.get("/api/menu", async (req, res) => {
   try {
-    const menuItems = await Menu.find();
-    res.json(menuItems);
+    const menu = await Menu.find();
+    res.json(menu);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-app.post("/api/menu", authenticate, authorize(['admin']), upload.single('image'), async (req, res) => {
+app.post("/api/menu", authenticate, authorize(['admin']), async (req, res) => {
   try {
-    const menuItem = new Menu({
-      name: req.body.name,
-      description: req.body.description,
-      price: parseFloat(req.body.price),
-      category: req.body.category,
-      image: req.file ? `/uploads/${req.file.filename}` : req.body.image,
-      quantity: parseInt(req.body.quantity),
-      available: req.body.available === 'true'
-    });
-    await menuItem.save();
-    res.status(201).json(menuItem);
+    const menu = new Menu(req.body);
+    await menu.save();
+    res.json(menu);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 });
 
-app.put("/api/menu/:id", authenticate, authorize(['admin']), upload.single('image'), async (req, res) => {
+app.put("/api/menu/:id", authenticate, authorize(['admin']), async (req, res) => {
   try {
-    const updateData = {
-      name: req.body.name,
-      description: req.body.description,
-      price: parseFloat(req.body.price),
-      category: req.body.category,
-      quantity: parseInt(req.body.quantity),
-      available: req.body.available === 'true'
-    };
-    if (req.file) {
-      updateData.image = `/uploads/${req.file.filename}`;
-    }
-    const menuItem = await Menu.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    if (!menuItem) {
-      return res.status(404).json({ message: 'Menu item not found' });
-    }
-    res.json(menuItem);
+    const menu = await Menu.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(menu);
   } catch (error) {
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 });
 
 app.delete("/api/menu/:id", authenticate, authorize(['admin']), async (req, res) => {
   try {
-    const menuItem = await Menu.findByIdAndDelete(req.params.id);
-    if (!menuItem) {
-      return res.status(404).json({ message: 'Menu item not found' });
-    }
+    await Menu.findByIdAndDelete(req.params.id);
     res.json({ message: 'Menu item deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Payment routes
-app.post("/api/payments/:orderId/process", async (req, res) => {
+app.post("/api/menu/:id/upload-image", upload.single('image'), async (req, res) => {
   try {
-    console.log('Processing payment for order:', req.params.orderId);
-    const payment = await Payment.findOne({ orderId: req.params.orderId });
-    console.log('Payment found:', payment);
-    if (!payment) {
-      console.log('Payment not found for order:', req.params.orderId);
-      return res.status(404).json({ message: 'Payment not found' });
-    }
-    // Mock processing: always succeed
-    payment.status = 'completed';
-    await payment.save();
-    console.log('Payment saved as completed');
-    // Reset user discount after payment
-    const order = await Order.findById(req.params.orderId);
-    if (order && order.userId) {
-      await User.findByIdAndUpdate(order.userId, { discount: 0 });
-    }
-    res.json({ message: 'Payment processed successfully', payment });
-  } catch (error) {
-    console.log('Payment processing error:', error);
-    res.status(500).json({ message: error.message });
-  }
-});
-
-app.get("/api/payments/:orderId/status", async (req, res) => {
-  try {
-    const payment = await Payment.findOne({ orderId: req.params.orderId });
-    if (!payment) {
-      return res.status(404).json({ message: 'Payment not found' });
-    }
-    res.json({ status: payment.status });
+    const menu = await Menu.findByIdAndUpdate(req.params.id, { image: req.file.filename }, { new: true });
+    res.json(menu);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-// Scratch card routes
-app.post("/api/scratch-cards", authenticate, async (req, res) => {
-  console.log('POST /api/scratch-cards - User:', req.user);
-  console.log('ScratchCard model:', ScratchCard);
+app.get("/api/orders-all", authenticate, authorize(['admin']), async (req, res) => {
   try {
-    const card = new ScratchCard({ userId: req.user._id });
-    await card.save();
-    res.status(201).json(card);
+    const orders = await Order.find().populate('userId', 'name email');
+    res.json(orders);
   } catch (error) {
-    console.error('Error creating card:', error);
-    res.status(400).json({ message: error.message });
+    res.status(500).json({ message: error.message });
   }
 });
 
-app.get("/api/scratch-cards", authenticate, async (req, res) => {
-  console.log('GET /api/scratch-cards - User:', req.user);
-  console.log('ScratchCard model:', ScratchCard);
+app.post("/api/discount", authenticate, async (req, res) => {
   try {
-    const cards = await ScratchCard.find({ userId: req.user._id });
+    const user = await User.findByIdAndUpdate(req.user._id, req.body, { new: true });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/scratch-cards", async (req, res) => {
+  try {
+    const cards = await ScratchCard.find();
     res.json(cards);
   } catch (error) {
-    console.error('Error fetching cards:', error);
     res.status(500).json({ message: error.message });
   }
 });
 
-app.put("/api/scratch-cards/:id/scratch", authenticate, async (req, res) => {
+app.post("/api/scratch-cards", authenticate, authorize(['admin']), async (req, res) => {
+  try {
+    const card = new ScratchCard(req.body);
+    await card.save();
+    res.json(card);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.put("/api/scratch-cards/:id", authenticate, async (req, res) => {
+  try {
+    const { prize } = req.body;
+    const card = await ScratchCard.findByIdAndUpdate(req.params.id, { isScratched: true, isRedeemed: true }, { new: true });
+    const user = await User.findByIdAndUpdate(req.user._id, { $inc: { discount: prize } }, { new: true });
+    res.json({ user, card, prize });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/scratch-cards/:id/check", async (req, res) => {
   try {
     const card = await ScratchCard.findById(req.params.id);
-    if (!card || card.userId.toString() !== req.user._id.toString()) {
-      return res.status(404).json({ message: 'Card not found' });
-    }
-    if (card.scratched) {
-      return res.status(400).json({ message: 'Already scratched' });
-    }
-    const highPrizeCount = await ScratchCard.countDocuments({ prize: { $gt: 20 }, scratched: true });
-    let prize;
-    if (highPrizeCount < 4) {
-      prize = Math.floor(Math.random() * 30) + 1;
-    } else {
-      prize = Math.floor(Math.random() * 20) + 1;
-    }
-    card.prize = prize;
-    card.scratched = true;
-    await card.save();
-    await User.findByIdAndUpdate(req.user._id, { $inc: { discount: prize } });
+    if (!card) return res.status(404).json({ message: 'Card not found' });
+    const { prize } = card;
     res.json({ prize });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/food', { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('✅ MongoDB connected successfully!'))
-  .catch(err => console.error('❌ MongoDB connection failed:', err.message));
+// MongoDB Connection with retry logic
+const connectMongo = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/food', { 
+      useNewUrlParser: true, 
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 15000,
+      socketTimeoutMS: 45000
+    });
+    console.log('✅ MongoDB connected successfully!');
+  } catch (err) {
+    console.error('❌ MongoDB connection failed:', err.message);
+    console.log('Retrying in 5 seconds...');
+    setTimeout(connectMongo, 5000);
+  }
+};
+
+connectMongo();
 
 server.listen(process.env.PORT || 5000, () => console.log("Server running"));
