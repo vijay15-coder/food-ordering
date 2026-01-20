@@ -1,4 +1,10 @@
-require('dotenv').config();
+require('dotenv').config({ override: true });
+
+// Debug: Log environment variables
+console.log('Environment Variables:');
+console.log('MONGO_URI:', process.env.MONGO_URI ? 'SET' : 'NOT SET');
+console.log('JWT_SECRET:', process.env.JWT_SECRET ? 'SET' : 'NOT SET');
+console.log('NODE_ENV:', process.env.NODE_ENV || 'NOT SET');
 
 const express = require("express");
 const mongoose = require("mongoose");
@@ -460,6 +466,8 @@ app.put("/api/scratch-cards/:id/scratch", authenticate, async (req, res) => {
   }
 });
 
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true }).catch(err => console.error('MongoDB connection error:', err));
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/food', { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log('✅ MongoDB connected successfully'))
+  .catch(err => console.error('❌ MongoDB connection error:', err.message));
 
 server.listen(process.env.PORT || 5000, () => console.log("Server running"));
