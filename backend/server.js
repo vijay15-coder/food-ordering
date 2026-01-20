@@ -295,20 +295,32 @@ const parseMongoUri = (uri) => {
   } catch (e) { return {}; }
 };
 
-const dohResolve = (name, type = 'SRV') => {
-  const dohUrl = `https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`;
-  return new Promise((resolve, reject) => {
-    https.get(dohUrl, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => {
-        try {
-          const json = JSON.parse(data);
-          resolve(json);
-        } catch (err) { reject(err); }
+const dohResolve = async (name, type = 'SRV') => {
+  const endpoints = [
+    `https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`,
+    `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`,
+    `https://1.1.1.1/dns-query?name=${encodeURIComponent(name)}&type=${type}`
+  ];
+
+  for (const dohUrl of endpoints) {
+    try {
+      const json = await new Promise((resolve, reject) => {
+        https.get(dohUrl, { headers: { 'Accept': 'application/dns-json' } }, (res) => {
+          let data = '';
+          res.on('data', (chunk) => data += chunk);
+          res.on('end', () => {
+            try { resolve(JSON.parse(data)); } catch (err) { reject(err); }
+          });
+        }).on('error', reject);
       });
-    }).on('error', reject);
-  });
+      if (json && json.Answer && json.Answer.length) return json;
+      // if no Answer, continue to next endpoint
+    } catch (err) {
+      // ignore and try next DOH provider
+    }
+  }
+  // If all DOH providers failed or returned no answers, return null
+  return null;
 };
 
 const buildDirectUriFromSrv = async (srvName, originalUri) => {
