@@ -271,19 +271,106 @@ app.get("/api/scratch-cards/:id/check", async (req, res) => {
   }
 });
 
-// MongoDB Connection with retry logic
-const connectMongo = async () => {
+// MongoDB Connection with retry logic and DNS-over-HTTPS SRV fallback
+const https = require('https');
+const url = require('url');
+
+const parseMongoUri = (uri) => {
   try {
-    await mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/food', { 
-      useNewUrlParser: true, 
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 15000,
-      socketTimeoutMS: 45000
-    });
-    console.log('✅ MongoDB connected successfully!');
+    // basic parse for user:pass and db name
+    if (!uri) return {};
+    const withoutPrefix = uri.replace('mongodb+srv://', '').replace('mongodb://', '');
+    const atIndex = withoutPrefix.indexOf('@');
+    let auth = null;
+    let rest = withoutPrefix;
+    if (atIndex !== -1) {
+      auth = withoutPrefix.substring(0, atIndex);
+      rest = withoutPrefix.substring(atIndex + 1);
+    }
+    const slashIndex = rest.indexOf('/');
+    const hosts = slashIndex !== -1 ? rest.substring(0, slashIndex) : rest;
+    const db = slashIndex !== -1 ? rest.substring(slashIndex + 1).split('?')[0] : '';
+    const [user, pass] = auth ? auth.split(':') : [null, null];
+    return { user, pass, hosts, db };
+  } catch (e) { return {}; }
+};
+
+const dohResolve = (name, type = 'SRV') => {
+  const dohUrl = `https://dns.google/resolve?name=${encodeURIComponent(name)}&type=${type}`;
+  return new Promise((resolve, reject) => {
+    https.get(dohUrl, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        try {
+          const json = JSON.parse(data);
+          resolve(json);
+        } catch (err) { reject(err); }
+      });
+    }).on('error', reject);
+  });
+};
+
+const buildDirectUriFromSrv = async (srvName, originalUri) => {
+  try {
+    const srv = await dohResolve(srvName, 'SRV');
+    if (!srv || !srv.Answer) return null;
+    // Collect targets
+    const targets = srv.Answer.map(a => a.data).filter(Boolean);
+    const hostPorts = [];
+    for (const t of targets) {
+      // t format: "priority weight port target"
+      const parts = t.split(' ');
+      const port = parts[2];
+      const targetHost = parts[3].replace(/\.$/, '');
+      // resolve A for targetHost
+      const a = await dohResolve(targetHost, 'A');
+      if (a && a.Answer) {
+        const ips = a.Answer.map(x => x.data);
+        // use first IP for connection
+        hostPorts.push(`${ips[0]}:${port}`);
+      } else {
+        // fallback to using hostname
+        hostPorts.push(`${targetHost}:${port}`);
+      }
+    }
+    const { user, pass, db } = parseMongoUri(originalUri);
+    if (!hostPorts.length) return null;
+    const auth = user && pass ? `${user}:${pass}@` : '';
+    const direct = `mongodb://${auth}${hostPorts.join(',')}/${db}?ssl=true&authSource=admin&retryWrites=true&w=majority`;
+    return direct;
   } catch (err) {
-    console.error('❌ MongoDB connection failed:', err.message);
-    console.log('Retrying in 5 seconds...');
+    return null;
+  }
+};
+
+const connectMongo = async () => {
+  const baseUri = process.env.MONGO_URI || 'mongodb://localhost:27017/food';
+  try {
+    await mongoose.connect(baseUri, { useNewUrlParser: true, useUnifiedTopology: true, serverSelectionTimeoutMS: 15000, socketTimeoutMS: 45000 });
+    console.log('✅ MongoDB connected successfully!');
+    return;
+  } catch (err) {
+    console.error('❌ MongoDB initial connection failed:', err.message);
+    // If it's a DNS SRV resolution error, try DNS-over-HTTPS fallback
+    if (err.message && err.message.includes('ENOTFOUND') && baseUri.startsWith('mongodb+srv://')) {
+      console.log('Attempting DNS-over-HTTPS SRV resolution fallback...');
+      const srvName = `_mongodb._tcp.${baseUri.split('@').pop().split('/')[0]}`;
+      const direct = await buildDirectUriFromSrv(srvName, baseUri);
+      if (direct) {
+        try {
+          console.log('Trying direct URI constructed from SRV:', direct.substring(0, 100) + '...');
+          await mongoose.connect(direct, { useNewUrlParser: true, useUnifiedTopology: true, serverSelectionTimeoutMS: 15000, socketTimeoutMS: 45000 });
+          console.log('✅ MongoDB connected successfully via direct IPs!');
+          return;
+        } catch (err2) {
+          console.error('❌ Direct IP connection failed:', err2.message);
+        }
+      } else {
+        console.error('Could not construct direct connection URI from SRV records');
+      }
+    }
+    console.log('Retrying initial connection in 5 seconds...');
     setTimeout(connectMongo, 5000);
   }
 };
