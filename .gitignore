@@ -5,7 +5,7 @@ backend/node_modules/
 */node_modules
 
 # Environment variables
-.env
+# .env - Commented out so Render can use it in production
 .env.local
 .env.*.local
 
