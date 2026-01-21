@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import io from 'socket.io-client';
+import API_BASE_URL from '../config/api';
 
 const OrderTracking = () => {
   const [orderNumber, setOrderNumber] = useState('');

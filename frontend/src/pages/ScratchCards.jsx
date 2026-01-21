@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ScratchCard from '../components/ScratchCard';
+import API_BASE_URL from '../config/api';
 
 const ScratchCards = () => {
 
@@ -16,7 +17,7 @@ const ScratchCards = () => {
 
       const token = localStorage.getItem('token');
 
-      const response = await fetch('http://localhost:5000/api/scratch-cards', {
+      const response = await fetch(`${API_BASE_URL}/api/scratch-cards`, {
 
         headers: { 'Authorization': `Bearer ${token}` }
 
@@ -64,7 +65,7 @@ const ScratchCards = () => {
 
       const token = localStorage.getItem('token');
 
-      const response = await fetch('http://localhost:5000/api/scratch-cards', {
+      const response = await fetch(`${API_BASE_URL}/api/scratch-cards`, {
 
         method: 'POST',
 

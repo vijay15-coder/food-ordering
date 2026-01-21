@@ -4,6 +4,7 @@ import { useCart } from '../contexts/CartContext';
 import { useAuth } from '../contexts/AuthContext';
 import Bill from '../components/Bill';
 import EmailNotification from '../components/EmailNotification';
+import API_BASE_URL from '../config/api';
 
 const Checkout = () => {
   const { cartItems, getTotal, clearCart } = useCart();

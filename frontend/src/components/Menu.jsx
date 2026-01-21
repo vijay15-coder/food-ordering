@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import MenuItem from './MenuItem';
+import API_BASE_URL from '../config/api';
 
 const Menu = () => {
   const [menuItems, setMenuItems] = useState([]);

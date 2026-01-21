@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import Bill from '../components/Bill';
 import { useAuth } from '../contexts/AuthContext';
+import API_BASE_URL from '../config/api';
 
 const OrderHistory = () => {
   const [orders, setOrders] = useState([]);
