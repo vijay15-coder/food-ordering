@@ -146,6 +146,41 @@ app.get("/api/orders", authenticate, async (req, res) => {
   }
 });
 
+// Get orders for authenticated user
+app.get("/api/orders/user", authenticate, async (req, res) => {
+  try {
+    const orders = await Order.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Get approved and completed orders for public tracking
+app.get("/api/orders/public", async (req, res) => {
+  try {
+    const orders = await Order.find({ 
+      status: { $in: ['approved', 'completed'] } 
+    }).sort({ createdAt: -1 });
+    res.json(orders);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+// Track order by order number
+app.get("/api/orders/track/:orderNumber", async (req, res) => {
+  try {
+    const order = await Order.findOne({ orderNumber: parseInt(req.params.orderNumber) });
+    if (!order) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+    res.json(order);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
 app.put("/api/orders/:id", authenticate, authorize(['admin']), async (req, res) => {
   try {
     const order = await Order.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -230,18 +265,28 @@ app.post("/api/discount", authenticate, async (req, res) => {
   }
 });
 
-app.get("/api/scratch-cards", async (req, res) => {
+app.get("/api/scratch-cards", authenticate, async (req, res) => {
   try {
-    const cards = await ScratchCard.find();
+    const cards = await ScratchCard.find({ userId: req.user._id });
     res.json(cards);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-app.post("/api/scratch-cards", authenticate, authorize(['admin']), async (req, res) => {
+// Create scratch card for customer (not admin only)
+app.post("/api/scratch-cards", authenticate, async (req, res) => {
   try {
-    const card = new ScratchCard(req.body);
+    // Generate random prize between 50-300 rupees
+    const prizes = [50, 75, 100, 125, 150, 175, 200, 250, 300];
+    const randomPrize = prizes[Math.floor(Math.random() * prizes.length)];
+    
+    const card = new ScratchCard({
+      userId: req.user._id,
+      prize: randomPrize,
+      scratched: false,
+      createdAt: new Date()
+    });
     await card.save();
     res.json(card);
   } catch (error) {
@@ -249,18 +294,33 @@ app.post("/api/scratch-cards", authenticate, authorize(['admin']), async (req, r
   }
 });
 
-app.put("/api/scratch-cards/:id", authenticate, async (req, res) => {
+// Scratch card endpoint
+app.put("/api/scratch-cards/:id/scratch", authenticate, async (req, res) => {
   try {
-    const { prize } = req.body;
-    const card = await ScratchCard.findByIdAndUpdate(req.params.id, { isScratched: true, isRedeemed: true }, { new: true });
+    const card = await ScratchCard.findById(req.params.id);
+    if (!card) {
+      return res.status(404).json({ message: 'Card not found' });
+    }
+    
+    // Verify card belongs to user
+    if (card.userId.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Access denied. Insufficient permissions.' });
+    }
+    
+    if (card.scratched) {
+      return res.status(400).json({ message: 'Card already scratched' });
+    }
+    
+    const prize = card.prize;
+    const updatedCard = await ScratchCard.findByIdAndUpdate(req.params.id, { scratched: true }, { new: true });
     const user = await User.findByIdAndUpdate(req.user._id, { $inc: { discount: prize } }, { new: true });
-    res.json({ user, card, prize });
+    res.json({ user, card: updatedCard, prize });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
 
-app.get("/api/scratch-cards/:id/check", async (req, res) => {
+app.put("/api/scratch-cards/:id", authenticate, async (req, res) => {
   try {
     const card = await ScratchCard.findById(req.params.id);
     if (!card) return res.status(404).json({ message: 'Card not found' });

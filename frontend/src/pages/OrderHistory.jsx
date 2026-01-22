@@ -15,6 +15,12 @@ const OrderHistory = () => {
     const fetchOrders = async () => {
       try {
         const token = localStorage.getItem('token');
+        if (!token) {
+          setError('Please login to view your orders');
+          setLoading(false);
+          return;
+        }
+        
         const response = await fetch(`${API_BASE_URL}/api/orders/user`, {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -22,13 +28,32 @@ const OrderHistory = () => {
         });
         
         if (!response.ok) {
-          throw new Error('Failed to fetch orders');
+          const contentType = response.headers.get('content-type');
+          let errorMessage = 'Failed to fetch orders';
+          
+          if (contentType && contentType.includes('application/json')) {
+            try {
+              const errorData = await response.json();
+              errorMessage = errorData.message || errorMessage;
+            } catch (e) {
+              errorMessage = `Server error: ${response.status}`;
+            }
+          } else {
+            errorMessage = `Server error: ${response.status}`;
+          }
+          
+          throw new Error(errorMessage);
+        }
+        
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Invalid response format from server');
         }
         
         const data = await response.json();
-        setOrders(data);
+        setOrders(data || []);
       } catch (err) {
-        console.log('Error fetching orders:', err.message);
+        console.error('Error fetching orders:', err.message);
         setError(err.message);
       } finally {
         setLoading(false);

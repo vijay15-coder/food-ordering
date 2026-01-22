@@ -53,13 +53,32 @@ const PublicOrderTracking = () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/api/orders/public`);
-      const data = await response.json();
-
+      
       if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch orders');
+        const contentType = response.headers.get('content-type');
+        let errorMessage = 'Failed to fetch orders';
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } catch (e) {
+            errorMessage = `Server error: ${response.status}`;
+          }
+        } else {
+          errorMessage = `Server error: ${response.status}`;
+        }
+        
+        throw new Error(errorMessage);
       }
-
-      setOrders(data);
+      
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('Invalid response format from server');
+      }
+      
+      const data = await response.json();
+      setOrders(data || []);
     } catch (err) {
       setError(err.message);
     } finally {

@@ -16,6 +16,13 @@ const ScratchCards = () => {
     try {
 
       const token = localStorage.getItem('token');
+      
+      if (!token) {
+        alert('Please login to use scratch cards');
+        setCards([]);
+        setLoading(false);
+        return;
+      }
 
       const response = await fetch(`${API_BASE_URL}/api/scratch-cards`, {
 
@@ -28,20 +35,36 @@ const ScratchCards = () => {
         alert('Please login to use scratch cards');
 
         setCards([]);
-
+        setLoading(false);
         return;
 
       }
 
-      if (!response.ok) throw new Error('Failed to fetch cards');
+      if (!response.ok) {
+        const contentType = response.headers.get('content-type');
+        let errorMessage = 'Failed to fetch cards';
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } catch (e) {
+            errorMessage = `Server error: ${response.status}`;
+          }
+        }
+        
+        throw new Error(errorMessage);
+      }
 
       const data = await response.json();
 
-      setCards(data);
+      setCards(data || []);
 
     } catch (error) {
 
       console.error('Error fetching cards:', error);
+
+      alert('Error fetching cards: ' + error.message);
 
       setCards([]);
 
@@ -64,6 +87,11 @@ const ScratchCards = () => {
     try {
 
       const token = localStorage.getItem('token');
+      
+      if (!token) {
+        alert('Please login to use scratch cards');
+        return;
+      }
 
       const response = await fetch(`${API_BASE_URL}/api/scratch-cards`, {
 
@@ -82,11 +110,19 @@ const ScratchCards = () => {
       }
 
       if (!response.ok) {
-
-        const error = await response.json();
-
-        alert(error.message);
-
+        const contentType = response.headers.get('content-type');
+        let errorMessage = 'Failed to create gift box';
+        
+        if (contentType && contentType.includes('application/json')) {
+          try {
+            const errorData = await response.json();
+            errorMessage = errorData.message || errorMessage;
+          } catch (e) {
+            errorMessage = `Server error: ${response.status}`;
+          }
+        }
+        
+        alert(errorMessage);
         return;
 
       }
@@ -95,7 +131,8 @@ const ScratchCards = () => {
 
     } catch (error) {
 
-      alert('Error opening gift box');
+      alert('Error opening gift box: ' + error.message);
+      console.error('Error creating card:', error);
 
     }
 
