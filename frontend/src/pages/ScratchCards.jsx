@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import ScratchCard from '../components/ScratchCard';
+import LoadingSpinner from '../components/LoadingSpinner';
 import API_BASE_URL from '../config/api';
 
 const ScratchCards = () => {

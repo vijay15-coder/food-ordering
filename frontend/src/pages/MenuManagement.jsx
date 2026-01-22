@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import LoadingSpinner from '../components/LoadingSpinner';
 import API_BASE_URL from '../config/api';
 
 const MenuManagement = () => {
@@ -90,14 +91,7 @@ const MenuManagement = () => {
     }
   };
 
-  if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Loading menu items...</p>
-      </div>
-    </div>
-  );
+  if (loading) return <LoadingSpinner message="Loading menu items..." />;
   if (error) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white shadow-lg rounded-lg p-8 max-w-md w-full text-center">

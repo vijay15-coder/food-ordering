@@ -75,7 +75,7 @@ async function seedDatabase() {
     console.log('Sample menu items inserted successfully');
 
     const adminEmail = 'vijay@gmail.com';
-    const adminPassword = 'vijaykumar@123';
+    const adminPassword = 'vijaykumar';
     const existingAdmin = await User.findOne({ email: adminEmail });
     if (!existingAdmin) {
       const hashedPassword = await bcrypt.hash(adminPassword, 10);

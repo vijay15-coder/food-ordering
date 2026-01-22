@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import io from 'socket.io-client';
 import Bill from '../components/Bill';
+import LoadingSpinner from '../components/LoadingSpinner';
 import API_BASE_URL from '../config/api';
 
 const OrderManagement = () => {
